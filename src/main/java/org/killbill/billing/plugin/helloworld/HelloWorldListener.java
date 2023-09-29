@@ -19,12 +19,20 @@
 
 package org.killbill.billing.plugin.helloworld;
 
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
+import org.joda.time.DateTime;
 import org.killbill.billing.account.api.Account;
 import org.killbill.billing.account.api.AccountApiException;
+import org.killbill.billing.catalog.api.CatalogApiException;
 import org.killbill.billing.notification.plugin.api.ExtBusEvent;
 import org.killbill.billing.osgi.libs.killbill.OSGIKillbillAPI;
 import org.killbill.billing.osgi.libs.killbill.OSGIKillbillEventDispatcher;
+import org.killbill.billing.plugin.api.PluginCallContext;
 import org.killbill.billing.plugin.api.PluginTenantContext;
+import org.killbill.billing.util.callcontext.CallContext;
 import org.killbill.billing.util.callcontext.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +60,17 @@ public class HelloWorldListener implements OSGIKillbillEventDispatcher.OSGIKillb
             // Handle ACCOUNT_CREATION and ACCOUNT_CHANGE only for demo purpose and just print the account
             //
             case ACCOUNT_CREATION:
+                logger.info("Trying to upload catalog");
+                final CallContext callContext = new PluginCallContext(HelloWorldActivator.PLUGIN_NAME, DateTime.now(), killbillEvent.getAccountId(), killbillEvent.getTenantId());
+                try {
+                    osgiKillbillAPI.getSecurityApi().login("admin", "password");
+                    osgiKillbillAPI.getCatalogUserApi().uploadCatalog(getCatalogXml(), callContext);
+                } catch (final CatalogApiException e) {
+                    logger.warn("Error in uploading catalog", e);
+                } finally {
+                    osgiKillbillAPI.getSecurityApi().logout();
+                }
+
             case ACCOUNT_CHANGE:
                 try {
                     final Account account = osgiKillbillAPI.getAccountUserApi().getAccountById(killbillEvent.getAccountId(), context);
@@ -67,4 +86,15 @@ public class HelloWorldListener implements OSGIKillbillEventDispatcher.OSGIKillb
 
         }
     }
+
+    private String getCatalogXml(){
+        try {
+            FileInputStream fis = new FileInputStream("D:/Data/intellij_workspace2/plugins/killbill-hello-world-java-plugin/src/main/resources/catalogs/catalog.xml");
+            String text = new String(fis.readAllBytes(), StandardCharsets.UTF_8);
+            return text;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
 }
