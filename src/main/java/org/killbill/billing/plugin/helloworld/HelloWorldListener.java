@@ -21,6 +21,8 @@ package org.killbill.billing.plugin.helloworld;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 
 import org.joda.time.DateTime;
@@ -36,6 +38,8 @@ import org.killbill.billing.util.callcontext.CallContext;
 import org.killbill.billing.util.callcontext.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.typesafe.config.ConfigException.IO;
 
 public class HelloWorldListener implements OSGIKillbillEventDispatcher.OSGIKillbillEventHandler {
 
@@ -87,14 +91,63 @@ public class HelloWorldListener implements OSGIKillbillEventDispatcher.OSGIKillb
         }
     }
 
-    private String getCatalogXml(){
-        try {
-            FileInputStream fis = new FileInputStream("D:/Data/intellij_workspace2/plugins/killbill-hello-world-java-plugin/src/main/resources/catalogs/catalog.xml");
-            String text = new String(fis.readAllBytes(), StandardCharsets.UTF_8);
-            return text;
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    public String getCatalogXml() {
+        final String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n" +
+                           "<catalog xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n" +
+                           "         xsi:noNamespaceSchemaLocation=\"https://docs.killbill.io/latest/catalog.xsd\">\n" +
+                           "    <effectiveDate>2020-01-01T00:00:00+00:00</effectiveDate>\n" +
+                           "    <catalogName>ExampleCatalog</catalogName>\n" +
+                           "    <recurringBillingMode>IN_ADVANCE</recurringBillingMode>\n" +
+                           "    <currencies>\n" +
+                           "        <currency>USD</currency>\n" +
+                           "    </currencies>\n" +
+                           "    <products>\n" +
+                           "        <product name=\"Standard\">\n" +
+                           "            <category>BASE</category>\n" +
+                           "        </product>\n" +
+                           "    </products>\n" +
+                           "    <rules>\n" +
+                           "        <changePolicy>\n" +
+                           "            <changePolicyCase>\n" +
+                           "                <policy>END_OF_TERM</policy>\n" +
+                           "            </changePolicyCase>\n" +
+                           "        </changePolicy>\n" +
+                           "        <cancelPolicy>\n" +
+                           "            <cancelPolicyCase>\n" +
+                           "                <policy>END_OF_TERM</policy>\n" +
+                           "            </cancelPolicyCase>\n" +
+                           "        </cancelPolicy>\n" +
+                           "    </rules>\n" +
+                           "    <plans>\n" +
+                           "        <plan name=\"standard-monthly\">\n" +
+                           "            <product>Standard</product>\n" +
+                           "            <initialPhases>\n" +
+                           "            </initialPhases>\n" +
+                           "            <finalPhase type=\"EVERGREEN\">\n" +
+                           "                <duration>\n" +
+                           "                    <unit>UNLIMITED</unit>\n" +
+                           "                </duration>\n" +
+                           "                <recurring>\n" +
+                           "                    <billingPeriod>MONTHLY</billingPeriod>\n" +
+                           "                    <recurringPrice>\n" +
+                           "                        <price>\n" +
+                           "                            <currency>USD</currency>\n" +
+                           "                            <value>30</value>\n" +
+                           "                        </price>\n" +
+                           "                    </recurringPrice>\n" +
+                           "                </recurring>\n" +
+                           "            </finalPhase>\n" +
+                           "        </plan>\n" +
+                           "    </plans>\n" +
+                           "    <priceLists>\n" +
+                           "        <defaultPriceList name=\"DEFAULT\">\n" +
+                           "            <plans>\n" +
+                           "                <plan>standard-monthly</plan>\n" +
+                           "            </plans>\n" +
+                           "        </defaultPriceList>\n" +
+                           "    </priceLists>\n" +
+                           "</catalog>";
+        return xml;
     }
 
 }
