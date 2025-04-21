@@ -97,7 +97,6 @@ public class HelloWorldActivator extends KillbillActivatorBase {
                                                                           .withRouteClass(HelloWorldHealthcheckServlet.class).withService(healthcheck).build();
         final HttpServlet httpServlet = PluginApp.createServlet(pluginApp);
         registerServlet(context, httpServlet);
-
         registerHandlers();
     }
 

@@ -19,11 +19,15 @@
 
 package org.killbill.billing.plugin.helloworld;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.UUID;
 
+import org.joda.time.DateTime;
 import org.joda.time.LocalDate;
+import org.killbill.billing.ObjectType;
 import org.killbill.billing.account.api.Account;
 import org.killbill.billing.account.api.AccountApiException;
 import org.killbill.billing.invoice.api.Invoice;
@@ -34,8 +38,13 @@ import org.killbill.billing.invoice.plugin.api.InvoiceFormatterFactory;
 import org.killbill.billing.notification.plugin.api.ExtBusEvent;
 import org.killbill.billing.osgi.libs.killbill.OSGIKillbillAPI;
 import org.killbill.billing.osgi.libs.killbill.OSGIKillbillEventDispatcher;
+import org.killbill.billing.plugin.api.PluginCallContext;
 import org.killbill.billing.plugin.api.PluginTenantContext;
+import org.killbill.billing.plugin.api.core.PluginCustomField;
+import org.killbill.billing.util.api.CustomFieldApiException;
+import org.killbill.billing.util.callcontext.CallContext;
 import org.killbill.billing.util.callcontext.TenantContext;
+import org.killbill.billing.util.customfield.CustomField;
 import org.osgi.util.tracker.ServiceTracker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,6 +74,7 @@ public class HelloWorldListener implements OSGIKillbillEventDispatcher.OSGIKillb
                     killbillEvent.getObjectId(),
                     killbillEvent.getObjectType());
 
+
         final TenantContext context = new PluginTenantContext(killbillEvent.getAccountId(), killbillEvent.getTenantId());
         switch (killbillEvent.getEventType()) {
             //
@@ -75,6 +85,13 @@ public class HelloWorldListener implements OSGIKillbillEventDispatcher.OSGIKillb
                 try {
                     final Account account = osgiKillbillAPI.getAccountUserApi().getAccountById(killbillEvent.getAccountId(), context);
                     logger.info("Account information: " + account);
+//                    List<CustomField> newFields = new ArrayList<>();
+//                    logger.info("creating custom field");
+//                    newFields.add(new PluginCustomField(UUID.randomUUID(), ObjectType.SUBSCRIPTION_EVENT, killbillEvent.getEventType().toString(), "test value", DateTime.now()));
+//                    final CallContext callContext = new PluginCallContext("hello-world-plugin", DateTime.now(), killbillEvent.getAccountId(),killbillEvent.getTenantId());
+//                    this.osgiKillbillAPI.getSecurityApi().login("admin","password");
+//                    this.osgiKillbillAPI.getCustomFieldUserApi().addCustomFields(newFields, callContext);
+//                    this.osgiKillbillAPI.getSecurityApi().logout();
                 } catch (final AccountApiException e) {
                     logger.warn("Unable to find account", e);
                 }
@@ -109,6 +126,7 @@ public class HelloWorldListener implements OSGIKillbillEventDispatcher.OSGIKillb
                     final String formattedEndDate = invoiceItemFormatter.getFormattedEndDate();
                     logger.info("hello-world-plugin formattedEndDate:{}",formattedEndDate);
                 }
+
             // Nothing
             default:
                 break;

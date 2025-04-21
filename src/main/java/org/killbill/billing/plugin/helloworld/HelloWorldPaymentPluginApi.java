@@ -20,26 +20,38 @@
 package org.killbill.billing.plugin.helloworld;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import org.joda.time.DateTime;
 import org.killbill.billing.catalog.api.Currency;
+import org.killbill.billing.osgi.libs.killbill.OSGIKillbillAPI;
 import org.killbill.billing.payment.api.PaymentMethodPlugin;
 import org.killbill.billing.payment.api.PluginProperty;
+import org.killbill.billing.payment.api.TransactionType;
 import org.killbill.billing.payment.plugin.api.GatewayNotification;
 import org.killbill.billing.payment.plugin.api.HostedPaymentPageFormDescriptor;
 import org.killbill.billing.payment.plugin.api.PaymentMethodInfoPlugin;
 import org.killbill.billing.payment.plugin.api.PaymentPluginApi;
 import org.killbill.billing.payment.plugin.api.PaymentPluginApiException;
+import org.killbill.billing.payment.plugin.api.PaymentPluginStatus;
 import org.killbill.billing.payment.plugin.api.PaymentTransactionInfoPlugin;
 import org.killbill.billing.util.callcontext.CallContext;
 import org.killbill.billing.util.callcontext.TenantContext;
 import org.killbill.billing.util.entity.Pagination;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 //
 // A 'real' payment plugin would of course implement this interface.
 //
 public class HelloWorldPaymentPluginApi implements PaymentPluginApi {
+
+    private static final Logger logger = LoggerFactory.getLogger(HelloWorldPaymentPluginApi.class);
+
+    public HelloWorldPaymentPluginApi() {
+    }
 
     @Override
     public PaymentTransactionInfoPlugin authorizePayment(final UUID kbAccountId, final UUID kbPaymentId, final UUID kbTransactionId, final UUID kbPaymentMethodId, final BigDecimal amount, final Currency currency, final Iterable<PluginProperty> properties, final CallContext context) throws PaymentPluginApiException {
@@ -53,7 +65,15 @@ public class HelloWorldPaymentPluginApi implements PaymentPluginApi {
 
     @Override
     public PaymentTransactionInfoPlugin purchasePayment(final UUID kbAccountId, final UUID kbPaymentId, final UUID kbTransactionId, final UUID kbPaymentMethodId, final BigDecimal amount, final Currency currency, final Iterable<PluginProperty> properties, final CallContext context) throws PaymentPluginApiException {
-        return null;
+        if(amount.compareTo(BigDecimal.TEN) < 0){
+            logger.info("amount {} is less than 10, payment failed ", amount);
+            return new HelloWorldPaymentTransactionInfoPlugin(kbPaymentId, kbTransactionId, amount, currency, PaymentPluginStatus.PENDING, properties, context);
+        }
+        else {
+            logger.info("amount {} is less than 10, processing payment ", amount);
+            return new HelloWorldPaymentTransactionInfoPlugin(kbPaymentId, kbTransactionId, amount, currency, PaymentPluginStatus.PROCESSED, properties, context);
+        }
+
     }
 
     @Override
@@ -124,5 +144,89 @@ public class HelloWorldPaymentPluginApi implements PaymentPluginApi {
     @Override
     public GatewayNotification processNotification(final String notification, final Iterable<PluginProperty> properties, final CallContext context) throws PaymentPluginApiException {
         return null;
+    }
+
+    private class HelloWorldPaymentTransactionInfoPlugin implements PaymentTransactionInfoPlugin {
+
+        private final UUID kbPaymentId;
+        private final UUID kbTransactionId;
+        private final BigDecimal amount;
+        private final Currency currency;
+
+        private final PaymentPluginStatus status;
+        private final CallContext context;
+        public HelloWorldPaymentTransactionInfoPlugin(final UUID kbPaymentId, final UUID kbTransactionId, final BigDecimal amount, final Currency currency, final PaymentPluginStatus status, final Iterable<PluginProperty> properties, final CallContext context) {
+            this.kbPaymentId = kbPaymentId;
+            this.kbTransactionId = kbTransactionId;
+            this.amount = amount;
+            this.currency = currency;
+            this.status = status;
+            this.context = context;
+        }
+
+        @Override
+        public UUID getKbPaymentId() {
+            return kbPaymentId;
+        }
+
+        @Override
+        public UUID getKbTransactionPaymentId() {
+            return kbTransactionId;
+        }
+
+        @Override
+        public TransactionType getTransactionType() {
+            return TransactionType.PURCHASE;
+        }
+
+        @Override
+        public BigDecimal getAmount() {
+            return amount;
+        }
+
+        @Override
+        public Currency getCurrency() {
+            return currency;
+        }
+
+        @Override
+        public DateTime getCreatedDate() {
+            return context.getCreatedDate();
+        }
+
+        @Override
+        public DateTime getEffectiveDate() {
+            return context.getCreatedDate();
+        }
+
+        @Override
+        public PaymentPluginStatus getStatus() {
+            return status;
+        }
+
+        @Override
+        public String getGatewayError() {
+            return null;
+        }
+
+        @Override
+        public String getGatewayErrorCode() {
+            return null;
+        }
+
+        @Override
+        public String getFirstPaymentReferenceId() {
+            return null;
+        }
+
+        @Override
+        public String getSecondPaymentReferenceId() {
+            return null;
+        }
+
+        @Override
+        public List<PluginProperty> getProperties() {
+            return null;
+        }
     }
 }
