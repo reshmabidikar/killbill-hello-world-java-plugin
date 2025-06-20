@@ -72,7 +72,7 @@ public class HelloWorldActivator extends KillbillActivatorBase {
 
 
         // Register an event listener (optional)
-        killbillEventHandler = new HelloWorldListener(killbillAPI, invoiceFormatterTracker, configProperties.getProperties());
+        killbillEventHandler = new HelloWorldListener(killbillAPI, invoiceFormatterTracker, configProperties.getProperties(), clock);
 
         // As an example, this plugin registers a PaymentPluginApi (this could be
         // changed to any other plugin api)

@@ -19,22 +19,32 @@
 
 package org.killbill.billing.plugin.helloworld;
 
+import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.Properties;
+import java.util.UUID;
 
-import org.joda.time.LocalDate;
 import org.killbill.billing.account.api.Account;
 import org.killbill.billing.account.api.AccountApiException;
-import org.killbill.billing.invoice.api.Invoice;
-import org.killbill.billing.invoice.api.InvoiceItem;
-import org.killbill.billing.invoice.api.formatters.InvoiceFormatter;
-import org.killbill.billing.invoice.api.formatters.InvoiceItemFormatter;
+import org.killbill.billing.catalog.api.Currency;
+import org.killbill.billing.catalog.api.PlanPhasePriceOverride;
+import org.killbill.billing.catalog.api.PlanPhaseSpecifier;
+import org.killbill.billing.entitlement.api.BaseEntitlementWithAddOnsSpecifier;
+import org.killbill.billing.entitlement.api.Entitlement;
+import org.killbill.billing.entitlement.api.EntitlementApiException;
+import org.killbill.billing.entitlement.api.EntitlementSpecifier;
+import org.killbill.billing.entitlement.api.boilerplate.BaseEntitlementWithAddOnsSpecifierImp;
 import org.killbill.billing.invoice.plugin.api.InvoiceFormatterFactory;
 import org.killbill.billing.notification.plugin.api.ExtBusEvent;
 import org.killbill.billing.osgi.libs.killbill.OSGIKillbillAPI;
+import org.killbill.billing.osgi.libs.killbill.OSGIKillbillClock;
 import org.killbill.billing.osgi.libs.killbill.OSGIKillbillEventDispatcher;
+import org.killbill.billing.plugin.api.PluginCallContext;
 import org.killbill.billing.plugin.api.PluginTenantContext;
+import org.killbill.billing.plugin.api.core.PluginEntitlementSpecifier;
+import org.killbill.billing.plugin.api.core.PluginPlanPhasePriceOverride;
+import org.killbill.billing.util.callcontext.CallContext;
 import org.killbill.billing.util.callcontext.TenantContext;
 import org.osgi.util.tracker.ServiceTracker;
 import org.slf4j.Logger;
@@ -50,10 +60,13 @@ public class HelloWorldListener implements OSGIKillbillEventDispatcher.OSGIKillb
 
     private final Properties configProperties;
 
-    public HelloWorldListener(final OSGIKillbillAPI killbillAPI, final ServiceTracker<InvoiceFormatterFactory, InvoiceFormatterFactory> invoiceFormatterTracker, Properties configProperties) {
+    final OSGIKillbillClock clock;
+
+    public HelloWorldListener(final OSGIKillbillAPI killbillAPI, final ServiceTracker<InvoiceFormatterFactory, InvoiceFormatterFactory> invoiceFormatterTracker, final Properties configProperties, final OSGIKillbillClock clock) {
         this.osgiKillbillAPI = killbillAPI;
         this.invoiceFormatterTracker = invoiceFormatterTracker;
         this.configProperties = configProperties;
+        this.clock = clock;
     }
 
     private static final String defaultLocale = "en_US";
@@ -66,53 +79,91 @@ public class HelloWorldListener implements OSGIKillbillEventDispatcher.OSGIKillb
                     killbillEvent.getObjectType());
 
         final TenantContext context = new PluginTenantContext(killbillEvent.getAccountId(), killbillEvent.getTenantId());
+        final CallContext callContext = new PluginCallContext("hello-world-plugin", clock.getClock().getUTCNow(), killbillEvent.getAccountId(), killbillEvent.getTenantId());
         switch (killbillEvent.getEventType()) {
             //
             // Handle ACCOUNT_CREATION and ACCOUNT_CHANGE only for demo purpose and just print the account
             //
             case ACCOUNT_CREATION:
-            case ACCOUNT_CHANGE:
                 try {
                     final Account account = osgiKillbillAPI.getAccountUserApi().getAccountById(killbillEvent.getAccountId(), context);
                     logger.info("Account information: " + account);
+                    createSubscription(account, callContext);
                 } catch (final AccountApiException e) {
                     logger.warn("Unable to find account", e);
+                } catch (final EntitlementApiException e) {
+                    logger.warn("Unable to create entitelment", e);
                 }
                 break;
-            case INVOICE_CREATION:
 
-                final Account account;
-                try {
-                    account = osgiKillbillAPI.getAccountUserApi().getAccountById(killbillEvent.getAccountId(), context);
-                } catch (AccountApiException e) {
-                    throw new RuntimeException(e);
-                }
-                final List<Invoice> invoices = osgiKillbillAPI.getInvoiceUserApi().getInvoicesByAccount(killbillEvent.getAccountId(), false, false, true, context);
-                logger.info("Invoices in hello-world-plugin {}: ",invoices.size());
-
-                final String invoiceFormatterPluginName = configProperties.getProperty("org.killbill.template.invoiceFormatterFactoryPluginName");
-                if(invoiceFormatterPluginName == null || invoiceFormatterPluginName.isEmpty()){
-                    logger.info("Invoice formatter plugin not configured. set the org.killbill.template.invoiceFormatterFactoryPluginName property to configure it");
-                    return;
-                }
-
-                final InvoiceFormatterFactory formatterFactory = (invoiceFormatterTracker != null ? invoiceFormatterTracker.getService() : null);
-                Invoice invoice = invoices.get(0); //For demo purpose, we are only retrieving the formattedEndDate for the first invoice
-                //TODO Using null for parameters like catalogBundlePath,bundle, defaultBundle, etc. Update this to use correct values if possible or verify that using null values has no adverse effect
-
-                InvoiceFormatter invoiceFormatter = formatterFactory.createInvoiceFormatter(defaultLocale, null, invoice, Locale.forLanguageTag(account.getLocale()), osgiKillbillAPI.getCurrencyConversionApi(), null, null);
-
-                List<InvoiceItem> items = invoiceFormatter.getInvoiceItems();
-                logger.info("hello-world-plugin got items:{}",items.size());
-                for(InvoiceItem item:items) {
-                    final InvoiceItemFormatter invoiceItemFormatter = (InvoiceItemFormatter)item;
-                    final String formattedEndDate = invoiceItemFormatter.getFormattedEndDate();
-                    logger.info("hello-world-plugin formattedEndDate:{}",formattedEndDate);
-                }
             // Nothing
             default:
                 break;
 
         }
     }
+
+    private void createSubscription(final Account account, final CallContext callContext) throws EntitlementApiException {
+
+        //base
+        final EntitlementSpecifier baseSpec = new PluginEntitlementSpecifier.Builder().withPlanPhaseSpecifier(new PlanPhaseSpecifier("standard-monthly-in-arrear")).build();
+
+        //addon with recuring price override 1.60
+        PlanPhasePriceOverride addonOverride = new PluginPlanPhasePriceOverride.Builder().withPhaseName("ao1-in-arrear-evergreen").withRecurringPrice(new BigDecimal("1.60")).withCurrency(Currency.USD).build();
+        final EntitlementSpecifier addonSpec = new PluginEntitlementSpecifier.Builder().withPlanPhaseSpecifier(new PlanPhaseSpecifier("ao1-in-arrear")).withOverrides(List.of(addonOverride)).build();
+
+        //bundle
+        final BaseEntitlementWithAddOnsSpecifier cartSpecifier = new BaseEntitlementWithAddOnsSpecifierImp.Builder<>().withEntitlementSpecifier(List.of(baseSpec, addonSpec)).build();
+
+        osgiKillbillAPI.getSecurityApi().login("admin", "password");
+        //create bundle
+        final List<UUID> allEntitlements = osgiKillbillAPI.getEntitlementApi().createBaseEntitlementsWithAddOns(account.getId(), List.of(cartSpecifier), true, Collections.emptyList(), callContext);
+
+        //Comment the code below and  Retrieve addon subscription via https://killbill.github.io/slate/subscription.html#retrieve-a-subscription-by-id
+        // verify that the prices section lists the overridden price
+//        "prices": [
+//        {
+//            "planName": "ao1-in-arrear-32",
+//                "phaseName": "ao1-in-arrear-32-evergreen",
+//                "phaseType": "EVERGREEN",
+//                "fixedPrice": null,
+//                "recurringPrice": 1.6,
+//                "usagePrices": []
+//        }
+//  ]
+
+        //schedule plan change for addon one month from now
+        final UUID addonEntId = allEntitlements.get(1);
+        final Entitlement addonEnt = osgiKillbillAPI.getEntitlementApi().getEntitlementForId(addonEntId, false, callContext);
+        addonOverride = new PluginPlanPhasePriceOverride.Builder().withPhaseName("ao1-in-arrear-evergreen").withRecurringPrice(new BigDecimal("1.75")).withCurrency(Currency.USD).build();
+        final EntitlementSpecifier addonSpec2 = new PluginEntitlementSpecifier.Builder().withPlanPhaseSpecifier(new PlanPhaseSpecifier("ao1-in-arrear")).withOverrides(List.of(addonOverride)).build();
+        addonEnt.changePlanWithDate(addonSpec2, clock.getClock().getUTCToday().plusMonths(1), Collections.emptyList(), callContext);
+
+        //Retrieve addon subscription via https://killbill.github.io/slate/subscription.html#retrieve-a-subscription-by-id and
+        // verify that the prices section lists the overridden price
+        //This show 2 recurring prices: 1.60 and 1.75:
+
+        //                    "prices": [
+        //                    {
+        //                        "planName": "ao1-in-arrear-36",
+        //                            "phaseName": "ao1-in-arrear-36-evergreen",
+        //                            "phaseType": "EVERGREEN",
+        //                            "fixedPrice": null,
+        //                            "recurringPrice": 1.6,
+        //                            "usagePrices": []
+        //                    },
+        //                    {
+        //                        "planName": "ao1-in-arrear-37",
+        //                            "phaseName": "ao1-in-arrear-37-evergreen",
+        //                            "phaseType": "EVERGREEN",
+        //                            "fixedPrice": null,
+        //                            "recurringPrice": 1.75,
+        //                            "usagePrices": []
+        //                    }
+        //  ]
+
+        osgiKillbillAPI.getSecurityApi().logout();
+
+    }
+
 }
