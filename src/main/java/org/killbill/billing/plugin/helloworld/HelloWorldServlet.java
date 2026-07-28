@@ -23,8 +23,10 @@ import java.util.Optional;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
+import org.jooby.mvc.Body;
 import org.jooby.mvc.GET;
 import org.jooby.mvc.Local;
+import org.jooby.mvc.POST;
 import org.jooby.mvc.Path;
 import org.killbill.billing.tenant.api.Tenant;
 import org.slf4j.Logger;
@@ -56,5 +58,12 @@ public class HelloWorldServlet {
         else {
         	logger.info("tenant is not available");
         }
+    }
+
+    @POST
+    @Path("/echo")
+    public HelloRequest echo(@Body final HelloRequest request) {
+        logger.info("Received {}", request.name);
+        return request;
     }
 }
